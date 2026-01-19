@@ -1,36 +1,61 @@
-# This is a basic workflow to help you get started with Actions
+name: OWASP ZAP Scan
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  zap_scan:
     runs-on: ubuntu-latest
+    name: Scan Website with OWASP ZAP
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Extract URL from Code
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          URL_VALUE=$(cat url.txt)
+
+          if [ -z "$URL_VALUE" ]; then
+            echo "Error: No se pudo extraer la URL del archivo."
+            exit 1
+          fi
+
+          echo "URL_TO_SCAN=$URL_VALUE" >> $GITHUB_ENV
+
+      - name: Get Timestamp
+        run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
+
+      - name: Create ZAP directory and Set Permissions
+        run: |
+          mkdir -p ./zap/wrk
+          chmod -R 777 ./zap/wrk
+
+      - name: Run ZAP Scan (HTML + JSON)
+        run: |
+          HTML_REPORT="report-${{ env.TIMESTAMP }}.html"
+          JSON_REPORT="report-${{ env.TIMESTAMP }}.json"
+
+          echo "Ejecutando OWASP ZAP 2.15.0 contra: ${{ env.URL_TO_SCAN }}"
+
+          docker run --rm \
+            -v $(pwd)/zap/wrk:/zap/wrk:rw \
+            zaproxy/zap-stable:2.15.0 zap-full-scan.py \
+            -t ${{ env.URL_TO_SCAN }} \
+            -g gen.conf \
+            -r $HTML_REPORT \
+            -J $JSON_REPORT || echo "ZAP finalizó con hallazgos o advertencias"
+
+      - name: Upload ZAP Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZAP-Reports-${{ env.TIMESTAMP }}
+          path: |
+            ./zap/wrk/report-${{ env.TIMESTAMP }}.html
+            ./zap/wrk/report-${{ env.TIMESTAMP }}.json
+          retention-days: 7
