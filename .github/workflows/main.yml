@@ -44,7 +44,7 @@ jobs:
 
           docker run --rm \
             -v $(pwd)/zap/wrk:/zap/wrk:rw \
-            zaproxy/zap-stable:2.15.0 zap-full-scan.py \
+            zaproxy/zap-stable:2.17.0 zap-full-scan.py \
             -t ${{ env.URL_TO_SCAN }} \
             -g gen.conf \
             -r $HTML_REPORT \
